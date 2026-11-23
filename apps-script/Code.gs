@@ -4,6 +4,7 @@
  * Keeps the story library in a Google Drive folder called "Story Box":
  *   Story Box/library.json          which stories exist, their chapters and covers, which figure plays what
  *   Story Box/stories/<story id>/   the MP3 chapters and cover picture of each story
+ *   Story Box/firmware/             box software updates uploaded from the Studio
  *
  * Two kinds of callers, each with its own secret key:
  *   - the Studio page (STUDIO_KEY): create stories, upload chapters and covers, assign figures
@@ -229,6 +230,17 @@ function studio_(req) {
       return { ok: true };
     });
 
+    case 'setFirmware': return change_(function (lib) {
+      const v = String(req.version || '').trim();
+      if (!/^\d+(\.\d+){1,2}$/.test(v)) throw new Error('Version should look like 2.2');
+      const meta = JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' +
+        encodeURIComponent(req.fileId) + '?fields=md5Checksum,size',
+        { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getContentText());
+      if (lib.firmware && lib.firmware.id !== req.fileId) trash_(lib.firmware.id);
+      lib.firmware = { v: v, id: req.fileId, size: Number(meta.size), md5: meta.md5Checksum, uploaded: Date.now() };
+      return { ok: true };
+    });
+
     case 'getChapter': {
       const s = story_(lib_(), req.sid);
       const ch = s.chapters[Number(req.index)];
@@ -253,16 +265,26 @@ function state_() {
     const f = lib.figures[uid];
     return { uid: uid, name: f.name, storyId: f.storyId };
   }).sort(function (a, b) { return a.name.localeCompare(b.name); });
-  return { stories: stories, figures: figures, box: lib.box };
+  return { stories: stories, figures: figures, box: lib.box, firmware: lib.firmware || null };
 }
 
 // Big files go to Drive in pieces ("resumable upload"), so phones on slow connections
 // and long recordings don't hit size limits.
 function uploadBegin_(req) {
-  const s = story_(lib_(), req.sid);
-  const isCover = req.kind === 'cover';
-  const name = (isCover ? 'cover-' : 'chapter-') + Date.now() + (isCover ? '.jpg' : '.mp3');
-  const mime = isCover ? 'image/jpeg' : 'audio/mpeg';
+  let name, mime, folderId, description;
+  if (req.kind === 'firmware') {
+    name = 'storybox-' + String(req.version || 'new').replace(/[^0-9.]/g, '') + '-' + Date.now() + '.bin';
+    mime = 'application/octet-stream';
+    folderId = sub_(root_(), 'firmware').getId();
+    description = 'Story Box firmware';
+  } else {
+    const s = story_(lib_(), req.sid);
+    const isCover = req.kind === 'cover';
+    name = (isCover ? 'cover-' : 'chapter-') + Date.now() + (isCover ? '.jpg' : '.mp3');
+    mime = isCover ? 'image/jpeg' : 'audio/mpeg';
+    folderId = storyFolder_(req.sid).getId();
+    description = s.title;
+  }
   const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
     method: 'post',
     contentType: 'application/json; charset=UTF-8',
@@ -271,7 +293,7 @@ function uploadBegin_(req) {
       'X-Upload-Content-Type': mime,
       'X-Upload-Content-Length': String(req.size)
     },
-    payload: JSON.stringify({ name: name, parents: [storyFolder_(req.sid).getId()], description: s.title }),
+    payload: JSON.stringify({ name: name, parents: [folderId], description: description }),
     muteHttpExceptions: true
   });
   const h = r.getAllHeaders();
@@ -317,12 +339,14 @@ function manifest_(lib) {
   });
   const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(figures));
   const v = digest.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
-  return { v: v, figures: figures };
+  const out = { v: v, figures: figures };
+  if (lib.firmware) out.fw = { v: lib.firmware.v, id: lib.firmware.id, s: lib.firmware.size, md5: lib.firmware.md5 };
+  return out;
 }
 
 function fileChunk_(lib, id, start, len) {
-  // The box may only download files that belong to a story.
-  let allowed = false;
+  // The box may only download files that belong to a story, or the current firmware.
+  let allowed = !!(lib.firmware && lib.firmware.id === id);
   Object.keys(lib.stories).forEach(function (sid) {
     const s = lib.stories[sid];
     if (s.coverId === id) allowed = true;

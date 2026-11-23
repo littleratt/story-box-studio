@@ -239,8 +239,8 @@ async function toMp3(blob, onProgress) {
 }
 
 // ============================================================ uploads
-async function upload(sid, kind, blob, label) {
-  const begin = await api('uploadBegin', { sid, kind, size: blob.size });
+async function upload(sid, kind, blob, label, extra) {
+  const begin = await api('uploadBegin', Object.assign({ sid, kind, size: blob.size }, extra || {}));
   let fileId = null;
   for (let start = 0; start < blob.size; start += begin.chunk) {
     busy(label + ' ' + Math.round((start / blob.size) * 100) + '%', start / blob.size);
@@ -450,7 +450,12 @@ function showHome() {
           ? 'Last checked in ' + ago(box.lastSeen) +
             (box.battery != null ? ' · battery ' + box.battery + '%' : '') + (box.fw ? ' · v' + box.fw : '')
           : 'Hasn\'t checked in yet (that comes with the next box update).'),
-        box.sync ? el('div', { class: 'muted' }, box.sync) : null)));
+        box.sync ? el('div', { class: 'muted' }, box.sync) : null,
+        el('div', { class: 'muted', style: 'margin-top:6px' }, S.firmware
+          ? 'Box software in the Studio: v' + S.firmware.v + (box.fw === S.firmware.v ? ' (installed)' : box.fw ? ' (box will update)' : '')
+          : 'No box software update uploaded.'))),
+    el('div', { class: 'buttons' },
+      el('button', { class: 'small', onclick: () => guard(uploadFirmware) }, '⬆ Upload box update')));
 
   const known = new Set(S.figures.map((f) => f.uid));
   const seen = Object.keys(box.seen || {}).filter((u) => !known.has(u));
@@ -607,6 +612,23 @@ function showFigure(f, isNew) {
         if (!await confirmBox('Remove ' + f.name + '?', 'The figure will show "New friend!" on the box until it\'s added again. Stories are not deleted.', 'Remove')) return;
         busy('Removing…'); await api('deleteFigure', { uid: f.uid }); await refresh(); done(); showHome();
       }) }, 'Remove figure') : null));
+}
+
+// Box software updates: a .bin file from the firmware project, named like storybox-2.2.bin.
+async function uploadFirmware() {
+  const f = await pickFile('.bin,application/octet-stream');
+  if (!f) return;
+  const m = f.name.match(/(\d+\.\d+(?:\.\d+)?)/);
+  if (!m) throw new Error('The file name should include the version, like storybox-2.2.bin');
+  const v = m[1];
+  if (f.size < 200000 || f.size > 3300000) throw new Error('That doesn\'t look like a Story Box update file (wrong size).');
+  if (!await confirmBox('Send update v' + v + ' to the box?',
+      'The box installs it the next time it checks in with enough battery. If the new version doesn\'t work, ' +
+      'the box goes back to the old one by itself.', 'Upload')) return;
+  const fileId = await upload(null, 'firmware', f, 'Uploading update', { version: v });
+  busy('Saving…', 1);
+  await api('setFirmware', { fileId, version: v });
+  await refresh(); done(); showHome();
 }
 
 // ============================================================ start
