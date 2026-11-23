@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story Box Studio</title>
+<meta name="theme-color" content="#1d3557">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f3ee; --card: #ffffff; --ink: #1f2430; --muted: #6b7180; --line: #e3ded5;
+    --accent: #2a6f97; --accent-ink: #ffffff; --danger: #b23a3a; --rec: #d64545; --ok: #2e7d4f;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15181f; --card: #1f232c; --ink: #eceef2; --muted: #9aa1ae; --line: #2e3340;
+            --accent: #5aa9d6; --accent-ink: #0d1520; --danger: #e07070; --rec: #ef5b5b; --ok: #5cc28a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { background: #1d3557; color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 19px; margin: 0; flex: 1; }
+  header button { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  h2 { font-size: 17px; margin: 26px 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .tap { cursor: pointer; }
+  .tap:active { transform: scale(.99); }
+  img.thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; background: var(--line); flex: none; }
+  .blank-thumb { width: 72px; height: 54px; border-radius: 8px; background: var(--line); flex: none;
+                 display: grid; place-items: center; color: var(--muted); font-size: 22px; }
+  button, .btn { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+                 padding: 10px 14px; border-radius: 10px; cursor: pointer; min-height: 44px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--danger); }
+  button.small { padding: 6px 10px; min-height: 36px; font-size: 14px; }
+  button:disabled { opacity: .5; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  input[type=text], select { font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px;
+                             border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  .title-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .cover-big { width: 100%; max-width: 320px; aspect-ratio: 4/3; border-radius: 12px; background: var(--line);
+               display: block; object-fit: cover; }
+  .chapter { display: flex; align-items: center; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .chapter:first-child { border-top: none; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 13px; background: var(--line); }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+  .notice { border-left: 4px solid var(--accent); }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; z-index: 10; }
+  .dialog { background: var(--card); border-radius: 18px; padding: 20px; width: 100%; max-width: 420px; text-align: center; }
+  .recbtn { width: 120px; height: 120px; border-radius: 50%; border: 6px solid var(--line); background: var(--rec);
+            color: #fff; font-size: 18px; font-weight: 700; margin: 14px auto; display: block; }
+  .recbtn.stop { border-radius: 24px; background: #333; }
+  .timer { font-size: 34px; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .meter { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 10px 0; }
+  .meter > div { height: 100%; width: 0; background: var(--ok); transition: width .08s; }
+  .progress { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 12px; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); }
+  .err { color: var(--danger); white-space: pre-wrap; }
+  audio { width: 100%; margin-top: 8px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="hdr">Story Box Studio</h1>
+  <button id="backBtn" class="small hidden">‹ Back</button>
+</header>
+<main id="app"></main>
+
+<div id="busy" class="overlay hidden">
+  <div class="dialog">
+    <div id="busyMsg" style="font-weight:600">Working…</div>
+    <div class="progress"><div id="busyBar"></div></div>
+    <div class="muted" style="margin-top:10px">Please keep this page open.</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ============================================================ settings & server calls
+const LS = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+
+// A setup link looks like  .../#api=<web app URL>&key=<STUDIO_KEY>  — open it once per device.
+(function readSetupLink() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('api') && h.get('key')) {
+    LS.set('sbApi', h.get('api'));
+    LS.set('sbKey', h.get('key'));
+    history.replaceState(null, '', location.pathname);
+  }
+})();
+
+async function api(action, data = {}) {
+  const res = await fetch(LS.get('sbApi'), {
+    method: 'POST',
+    body: JSON.stringify(Object.assign({ key: LS.get('sbKey'), action }, data)),
+  });
+  if (!res.ok) throw new Error('Server error ' + res.status);
+  const j = await res.json();
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+
+// ============================================================ little helpers
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid.nodeType ? kid : String(kid));
+  return e;
+}
+function mmss(secs) { secs = Math.round(secs || 0); return Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0'); }
+function ago(ms) {
+  if (!ms) return 'never';
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  if (m < 48 * 60) return Math.round(m / 60) + ' hours ago';
+  return Math.round(m / 1440) + ' days ago';
+}
+function b64ToBlob(b64, type) {
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+function blobToB64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+function pickFile(accept, capture) {
+  return new Promise((resolve) => {
+    const i = el('input', { type: 'file', accept });
+    if (capture) i.setAttribute('capture', capture);
+    i.onchange = () => resolve(i.files[0] || null);
+    i.click();
+  });
+}
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+function busy(msg, frac) {
+  $('busy').classList.remove('hidden');
+  $('busyMsg').textContent = msg;
+  $('busyBar').style.width = Math.round((frac || 0) * 100) + '%';
+}
+function done() { $('busy').classList.add('hidden'); }
+async function guard(fn) {
+  try { await fn(); }
+  catch (e) { done(); console.error(e); alertBox('Something went wrong', e.message || String(e)); }
+}
+function alertBox(title, text) {
+  const ov = el('div', { class: 'overlay' },
+    el('div', { class: 'dialog' },
+      el('div', { style: 'font-weight:700;font-size:18px' }, title),
+      el('p', { class: 'err' }, text),
+      el('button', { class: 'primary', onclick: () => ov.remove() }, 'OK')));
+  document.body.append(ov);
+}
+function confirmBox(title, text, yesLabel) {
+  return new Promise((resolve) => {
+    const close = (v) => { ov.remove(); resolve(v); };
+    const ov = el('div', { class: 'overlay' },
+      el('div', { class: 'dialog' },
+        el('div', { style: 'font-weight:700;font-size:18px' }, title),
+        el('p', {}, text),
+        el('div', { class: 'buttons', style: 'justify-content:center' },
+          el('button', { onclick: () => close(false) }, 'Cancel'),
+          el('button', { class: 'primary', onclick: () => close(true) }, yesLabel || 'OK'))));
+    document.body.append(ov);
+  });
+}
+
+// ============================================================ audio: anything -> MP3
+// Mono, 44.1 kHz, 64 kbps: clear for voices, small files, and what the box plays best.
+const MP3_RATE = 44100, MP3_KBPS = 64;
+
+async function toMp3(blob, onProgress) {
+  onProgress('Reading the sound…', 0);
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try { decoded = await ac.decodeAudioData(await blob.arrayBuffer()); }
+  finally { ac.close(); }
+
+  // Mix down to one channel at 44.1 kHz.
+  const length = Math.ceil(decoded.duration * MP3_RATE);
+  const off = new OfflineAudioContext(1, length, MP3_RATE);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  src.connect(off.destination);
+  src.start();
+  const data = (await off.startRendering()).getChannelData(0);
+
+  // Trim silence at both ends (keeps a short pause), then make the loudest moment the same
+  // level in every chapter, so the kids don't need to change the volume between stories.
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) { const a = Math.abs(data[i]); if (a > peak) peak = a; }
+  if (peak < 0.001) throw new Error('The recording is silent. Check that the microphone is allowed and working.');
+  const thr = peak * 0.04, pad = Math.round(0.3 * MP3_RATE);
+  let a = 0, b = data.length - 1;
+  while (a < b && Math.abs(data[a]) < thr) a++;
+  while (b > a && Math.abs(data[b]) < thr) b--;
+  a = Math.max(0, a - pad); b = Math.min(data.length - 1, b + pad);
+  const gain = Math.min(0.89 / peak, 10);
+
+  const enc = new lamejs.Mp3Encoder(1, MP3_RATE, MP3_KBPS);
+  const BLOCK = 1152 * 16;
+  const pcm = new Int16Array(BLOCK);
+  const parts = [];
+  for (let i = a, n = 0; i <= b; i += BLOCK, n++) {
+    const end = Math.min(i + BLOCK, b + 1);
+    for (let j = i; j < end; j++) {
+      const v = Math.max(-1, Math.min(1, data[j] * gain));
+      pcm[j - i] = v < 0 ? v * 32768 : v * 32767;
+    }
+    const out = enc.encodeBuffer(pcm.subarray(0, end - i));
+    if (out.length) parts.push(new Uint8Array(out.buffer, out.byteOffset, out.length).slice());
+    if (n % 20 === 0) { onProgress('Making the MP3…', (i - a) / (b - a + 1)); await tick(); }
+  }
+  const tail = enc.flush();
+  if (tail.length) parts.push(new Uint8Array(tail.buffer, tail.byteOffset, tail.length).slice());
+  return { blob: new Blob(parts, { type: 'audio/mpeg' }), secs: (b - a + 1) / MP3_RATE };
+}
+
+// ============================================================ uploads
+async function upload(sid, kind, blob, label) {
+  const begin = await api('uploadBegin', { sid, kind, size: blob.size });
+  let fileId = null;
+  for (let start = 0; start < blob.size; start += begin.chunk) {
+    busy(label + ' ' + Math.round((start / blob.size) * 100) + '%', start / blob.size);
+    const piece = blob.slice(start, Math.min(start + begin.chunk, blob.size));
+    const r = await api('uploadChunk', { url: begin.url, start, total: blob.size, b64: await blobToB64(piece) });
+    if (r.done) fileId = r.fileId;
+  }
+  if (!fileId) throw new Error('The upload did not finish. Please try again.');
+  return fileId;
+}
+
+async function saveChapterAudio(sid, sourceBlob, replaceIndex) {
+  const mp3 = await toMp3(sourceBlob, (msg, f) => busy(msg, f));
+  if (mp3.secs > 40 * 60) throw new Error('That chapter is over 40 minutes. Please split it into shorter chapters.');
+  const fileId = await upload(sid, 'chapter', mp3.blob, 'Uploading');
+  busy('Saving…', 1);
+  await api('addChapter', { sid, fileId, secs: mp3.secs, replace: replaceIndex });
+}
+
+// ============================================================ covers (320 x 240, plain JPEG)
+function canvasToJpeg(c) { return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.88)); }
+
+async function coverFromPhoto(file) {
+  const img = await createImageBitmap(file);
+  const c = el('canvas', { width: 320, height: 240 });
+  const g = c.getContext('2d');
+  const scale = Math.max(320 / img.width, 240 / img.height);  // fill, then crop the middle
+  const w = img.width * scale, h = img.height * scale;
+  g.drawImage(img, (320 - w) / 2, (240 - h) / 2, w, h);
+  return canvasToJpeg(c);
+}
+
+async function coverFromTitle(title) {
+  const c = el('canvas', { width: 320, height: 240 });
+  const g = c.getContext('2d');
+  const palettes = [['#1d3557', '#457b9d'], ['#5b2a86', '#9a48d0'], ['#2d6a4f', '#52b788'], ['#9c3f0f', '#e07a2f'], ['#7a1f3d', '#d4567a']];
+  let hsh = 0; for (const ch of title) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+  const [c1, c2] = palettes[hsh % palettes.length];
+  const grd = g.createLinearGradient(0, 0, 0, 240);
+  grd.addColorStop(0, c1); grd.addColorStop(1, c2);
+  g.fillStyle = grd; g.fillRect(0, 0, 320, 240);
+  g.fillStyle = 'rgba(255,255,255,.7)';
+  for (let i = 0; i < 26; i++) {
+    const x = (hsh * (i + 7) * 13) % 320, y = (hsh * (i + 3) * 7) % 90, r = 1 + (i % 3) * .6;
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let size = 40, lines;
+  do {
+    g.font = 'bold ' + size + 'px system-ui, sans-serif';
+    lines = []; let line = '';
+    for (const word of title.split(/\s+/)) {
+      const t = line ? line + ' ' + word : word;
+      if (g.measureText(t).width > 290 && line) { lines.push(line); line = word; } else line = t;
+    }
+    lines.push(line);
+    size -= 4;
+  } while ((lines.length * size * 1.25 > 150 || lines.some((l) => g.measureText(l).width > 300)) && size > 16);
+  const lh = (size + 4) * 1.2, y0 = 150 - ((lines.length - 1) * lh) / 2;
+  lines.forEach((l, i) => g.fillText(l, 160, y0 + i * lh));
+  return canvasToJpeg(c);
+}
+
+// ============================================================ recorder dialog
+function recordDialog() {
+  return new Promise((resolve) => {
+    let stream, recorder, chunks = [], t0 = 0, timerId, raf, actx, resultBlob = null;
+    const timer = el('div', { class: 'timer' }, '0:00');
+    const meterBar = el('div');
+    const btn = el('button', { class: 'recbtn' }, 'Record');
+    const hint = el('p', { class: 'muted' }, 'Hold the phone about a hand-width from your mouth, in a quiet room.');
+    const player = el('audio', { controls: true, class: 'hidden' });
+    const useBtn = el('button', { class: 'primary hidden' }, 'Use this recording');
+    const againBtn = el('button', { class: 'hidden' }, 'Record again');
+    const cancelBtn = el('button', {}, 'Cancel');
+    const ov = el('div', { class: 'overlay' }, el('div', { class: 'dialog' },
+      el('div', { style: 'font-weight:700;font-size:18px' }, 'Record a chapter'),
+      timer, el('div', { class: 'meter' }, meterBar), btn, hint, player,
+      el('div', { class: 'buttons', style: 'justify-content:center' }, useBtn, againBtn, cancelBtn)));
+    document.body.append(ov);
+
+    const cleanup = () => {
+      clearInterval(timerId); cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (actx) actx.close();
+    };
+    const close = (v) => { cleanup(); ov.remove(); resolve(v); };
+
+    async function start() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false },
+        });
+      } catch (e) {
+        hint.textContent = 'The microphone is blocked. Allow it for this page in the browser settings, then try again.';
+        hint.className = 'err';
+        return;
+      }
+      actx = new AudioContext();
+      const an = actx.createAnalyser(); an.fftSize = 1024;
+      actx.createMediaStreamSource(stream).connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const draw = () => {
+        an.getFloatTimeDomainData(buf);
+        let s = 0; for (const v of buf) s += v * v;
+        meterBar.style.width = Math.min(100, Math.sqrt(s / buf.length) * 400) + '%';
+        raf = requestAnimationFrame(draw);
+      };
+      draw();
+      chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      recorder.onstop = () => {
+        resultBlob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        cleanup();
+        player.src = URL.createObjectURL(resultBlob);
+        player.classList.remove('hidden'); useBtn.classList.remove('hidden'); againBtn.classList.remove('hidden');
+        btn.classList.add('hidden');
+        hint.textContent = 'Listen back. If you like it, tap "Use this recording".';
+      };
+      recorder.start(1000);
+      t0 = Date.now();
+      timerId = setInterval(() => (timer.textContent = mmss((Date.now() - t0) / 1000)), 250);
+      btn.textContent = 'Stop'; btn.classList.add('stop');
+      hint.textContent = 'Recording… tap Stop when the chapter is done.';
+    }
+
+    btn.onclick = () => {
+      if (!recorder || recorder.state === 'inactive') start();
+      else recorder.stop();
+    };
+    againBtn.onclick = () => {
+      player.classList.add('hidden'); useBtn.classList.add('hidden'); againBtn.classList.add('hidden');
+      btn.classList.remove('hidden', 'stop'); btn.textContent = 'Record';
+      timer.textContent = '0:00'; meterBar.style.width = '0';
+      recorder = null; resultBlob = null;
+      hint.textContent = 'Tap Record to start again.';
+    };
+    useBtn.onclick = () => close(resultBlob);
+    cancelBtn.onclick = () => close(null);
+  });
+}
+
+// ============================================================ NFC (Chrome on Android)
+const canScan = 'NDEFReader' in window;
+function scanTag() {
+  return new Promise((resolve) => {
+    const ctrl = new AbortController();
+    const msg = el('p', {}, 'Hold the figure flat against the back of your phone…');
+    const ov = el('div', { class: 'overlay' }, el('div', { class: 'dialog' },
+      el('div', { style: 'font-size:46px' }, '📲'), msg,
+      el('button', { onclick: () => { ctrl.abort(); ov.remove(); resolve(null); } }, 'Cancel')));
+    document.body.append(ov);
+    const reader = new NDEFReader();
+    reader.onreading = (e) => {
+      ctrl.abort(); ov.remove();
+      resolve(String(e.serialNumber || '').replace(/[^0-9a-fA-F]/g, '').toUpperCase() || null);
+    };
+    reader.onreadingerror = () => { msg.textContent = 'Couldn\'t read it. Hold it still and try again.'; };
+    reader.scan({ signal: ctrl.signal }).catch((e) => {
+      msg.textContent = 'NFC isn\'t available: ' + e.message + ' (Is NFC turned on in the phone settings?)';
+    });
+  });
+}
+
+// ============================================================ screens
+let S = null;  // last state from the server
+const app = $('app');
+function screen(title, back) {
+  $('hdr').textContent = title;
+  $('backBtn').classList.toggle('hidden', !back);
+  $('backBtn').onclick = back || null;
+  app.replaceChildren();
+  window.scrollTo(0, 0);
+}
+async function refresh() { S = await api('state'); }
+function storyById(sid) { return S.stories.find((s) => s.sid === sid); }
+function coverImg(story) {
+  return story && story.cover ? el('img', { class: 'thumb', src: 'data:image/jpeg;base64,' + story.cover, alt: '' })
+                              : el('div', { class: 'blank-thumb' }, '♪');
+}
+
+function showSetup(message) {
+  screen('Story Box Studio');
+  const apiIn = el('input', { type: 'text', placeholder: 'https://script.google.com/macros/s/…/exec', value: LS.get('sbApi') || '' });
+  const keyIn = el('input', { type: 'text', placeholder: 'STUDIO_KEY', value: LS.get('sbKey') || '' });
+  app.append(el('div', { class: 'card' },
+    el('p', {}, 'Connect this device to your Story Box library. The easiest way is to open your setup link. Or paste the two values from the Apps Script log:'),
+    message ? el('p', { class: 'err' }, message) : null,
+    el('label', {}, 'Web app address'), apiIn,
+    el('label', {}, 'Studio key'), keyIn,
+    el('div', { class: 'buttons' }, el('button', { class: 'primary', onclick: () => guard(async () => {
+      LS.set('sbApi', apiIn.value.trim()); LS.set('sbKey', keyIn.value.trim());
+      busy('Connecting…'); await refresh(); done(); showHome();
+    }) }, 'Connect'))));
+}
+
+function showHome() {
+  screen('Story Box Studio');
+  const box = S.box || {};
+  const boxCard = el('div', { class: 'card notice' },
+    el('div', { class: 'row' },
+      el('div', { style: 'font-size:30px' }, '📦'),
+      el('div', { class: 'grow' },
+        el('div', { style: 'font-weight:600' }, 'The box'),
+        el('div', { class: 'muted' }, box.lastSeen
+          ? 'Last checked in ' + ago(box.lastSeen) +
+            (box.battery != null ? ' · battery ' + box.battery + '%' : '') + (box.fw ? ' · v' + box.fw : '')
+          : 'Hasn\'t checked in yet (that comes with the next box update).'),
+        box.sync ? el('div', { class: 'muted' }, box.sync) : null)));
+
+  const known = new Set(S.figures.map((f) => f.uid));
+  const seen = Object.keys(box.seen || {}).filter((u) => !known.has(u));
+
+  app.append(boxCard);
+
+  app.append(el('h2', {}, 'Figures'));
+  if (seen.length) {
+    app.append(el('div', { class: 'card' },
+      el('div', { style: 'font-weight:600' }, 'New figures the box has seen'),
+      seen.map((uid) => el('div', { class: 'row', style: 'margin-top:8px' },
+        el('code', { class: 'grow' }, uid),
+        el('button', { class: 'small', onclick: () => showFigure({ uid, name: '', storyId: null }, true) }, 'Set up')))));
+  }
+  if (!S.figures.length) app.append(el('p', { class: 'muted' }, 'No figures yet. Add one, then choose which story it plays.'));
+  for (const f of S.figures) {
+    const st = storyById(f.storyId);
+    app.append(el('div', { class: 'card row tap', onclick: () => showFigure(f, false) },
+      coverImg(st),
+      el('div', { class: 'grow' },
+        el('div', { class: 'title-ellipsis' }, f.name),
+        el('div', { class: 'muted' }, st ? 'Plays “' + st.title + '”' : 'No story chosen'))));
+  }
+  app.append(el('div', { class: 'buttons' },
+    el('button', { class: 'primary', onclick: () => showFigure({ uid: '', name: '', storyId: null }, true) }, '+ Add a figure')));
+
+  app.append(el('h2', {}, 'Stories'));
+  if (!S.stories.length) app.append(el('p', { class: 'muted' }, 'No stories yet. Make your first one!'));
+  for (const s of S.stories) {
+    const secs = s.chapters.reduce((t, c) => t + (c.secs || 0), 0);
+    const figs = S.figures.filter((f) => f.storyId === s.sid).map((f) => f.name);
+    app.append(el('div', { class: 'card row tap', onclick: () => showStory(s.sid) },
+      coverImg(s),
+      el('div', { class: 'grow' },
+        el('div', { class: 'title-ellipsis' }, s.title || 'Untitled story'),
+        el('div', { class: 'muted' }, s.chapters.length + (s.chapters.length === 1 ? ' chapter · ' : ' chapters · ') + mmss(secs) +
+          (figs.length ? ' · on ' + figs.join(', ') : '')))));
+  }
+  app.append(el('div', { class: 'buttons' },
+    el('button', { class: 'primary', onclick: () => guard(async () => {
+      busy('Creating story…');
+      const r = await api('saveStory', { title: 'New story' });
+      await refresh(); done(); showStory(r.sid);
+    }) }, '+ New story')));
+
+  app.append(el('div', { class: 'buttons', style: 'margin-top:30px' },
+    el('button', { class: 'small', onclick: () => guard(async () => { busy('Refreshing…'); await refresh(); done(); showHome(); }) }, 'Refresh'),
+    el('button', { class: 'small', onclick: () => showSetup() }, 'Connection settings')));
+}
+
+function showStory(sid) {
+  const s = storyById(sid);
+  if (!s) return showHome();
+  const back = () => showHome();
+  screen('Story', back);
+  const reload = async () => { await refresh(); done(); showStory(sid); };
+
+  const titleIn = el('input', { type: 'text', value: s.title, maxlength: 80 });
+  titleIn.onchange = () => guard(async () => { busy('Saving title…'); await api('saveStory', { sid, title: titleIn.value.trim() || 'Untitled story' }); await reload(); });
+
+  const cover = s.cover ? el('img', { class: 'cover-big', src: 'data:image/jpeg;base64,' + s.cover, alt: 'Cover' })
+                        : el('div', { class: 'cover-big', style: 'display:grid;place-items:center' }, el('span', { class: 'muted' }, 'No cover yet'));
+
+  const setCover = (makeBlob) => guard(async () => {
+    const blob = await makeBlob();
+    if (!blob) return;
+    busy('Uploading cover…');
+    const fileId = await upload(sid, 'cover', blob, 'Uploading cover');
+    await api('setCover', { sid, fileId });
+    await reload();
+  });
+
+  const chapterList = el('div');
+  s.chapters.forEach((c, i) => {
+    const player = el('audio', { controls: true, class: 'hidden' });
+    chapterList.append(el('div', { class: 'chapter' },
+      el('div', { class: 'grow' }, el('b', {}, 'Chapter ' + (i + 1)), ' ', el('span', { class: 'muted' }, mmss(c.secs))),
+      el('button', { class: 'small', title: 'Listen', onclick: () => guard(async () => {
+        busy('Loading chapter…');
+        const r = await api('getChapter', { sid, index: i });
+        player.src = URL.createObjectURL(b64ToBlob(r.b64, 'audio/mpeg'));
+        player.classList.remove('hidden'); done(); player.play();
+      }) }, '▶'),
+      el('button', { class: 'small', title: 'Move up', disabled: i === 0, onclick: () => guard(async () => { busy('Moving…'); await api('moveChapter', { sid, index: i, delta: -1 }); await reload(); }) }, '↑'),
+      el('button', { class: 'small', title: 'Move down', disabled: i === s.chapters.length - 1, onclick: () => guard(async () => { busy('Moving…'); await api('moveChapter', { sid, index: i, delta: 1 }); await reload(); }) }, '↓'),
+      el('button', { class: 'small', onclick: () => guard(async () => {
+        const blob = await recordDialog(); if (!blob) return;
+        await saveChapterAudio(sid, blob, i); await reload();
+      }) }, 'Redo'),
+      el('button', { class: 'small danger', title: 'Delete', onclick: () => guard(async () => {
+        if (!await confirmBox('Delete chapter ' + (i + 1) + '?', 'It goes to the Drive trash, so it can be recovered for 30 days.', 'Delete')) return;
+        busy('Deleting…'); await api('deleteChapter', { sid, index: i }); await reload();
+      }) }, '🗑'),
+      player));
+  });
+  if (!s.chapters.length) chapterList.append(el('p', { class: 'muted' }, 'No chapters yet.'));
+
+  const figs = S.figures.filter((f) => f.storyId === sid);
+
+  app.append(
+    el('label', {}, 'Title'), titleIn,
+    el('label', {}, 'Cover picture'), cover,
+    el('div', { class: 'buttons' },
+      el('button', { onclick: () => setCover(async () => { const f = await pickFile('image/*'); return f && coverFromPhoto(f); }) }, '🖼 Choose picture'),
+      el('button', { onclick: () => setCover(() => coverFromTitle(titleIn.value.trim() || 'Story')) }, '✨ Make a title cover')),
+    el('label', {}, 'Chapters'),
+    el('div', { class: 'card' }, chapterList),
+    el('div', { class: 'buttons' },
+      el('button', { class: 'primary', onclick: () => guard(async () => {
+        const blob = await recordDialog(); if (!blob) return;
+        await saveChapterAudio(sid, blob, null); await reload();
+      }) }, '🎙 Record a chapter'),
+      el('button', { onclick: () => guard(async () => {
+        const f = await pickFile('audio/*,video/*'); if (!f) return;
+        await saveChapterAudio(sid, f, null); await reload();
+      }) }, '📁 Add a sound file')),
+    el('label', {}, 'Figures'),
+    el('p', { class: 'muted' }, figs.length ? 'Played by: ' + figs.map((f) => f.name).join(', ') : 'No figure plays this yet. Go back and tap a figure to choose this story.'),
+    el('div', { class: 'buttons', style: 'margin-top:30px' },
+      el('button', { class: 'danger', onclick: () => guard(async () => {
+        if (!await confirmBox('Delete “' + s.title + '”?', 'The story and its recordings go to the Drive trash (recoverable for 30 days). Figures playing it will have no story.', 'Delete story')) return;
+        busy('Deleting…'); await api('deleteStory', { sid }); await refresh(); done(); showHome();
+      }) }, 'Delete story')));
+}
+
+function showFigure(f, isNew) {
+  screen(isNew ? 'Add a figure' : 'Figure', () => showHome());
+  const nameIn = el('input', { type: 'text', value: f.name || '', placeholder: 'e.g. Bunny, Dinosaur', maxlength: 40 });
+  const uidIn = el('input', { type: 'text', value: f.uid || '', placeholder: 'e.g. 04A1B2C3D4E5F6', autocapitalize: 'characters', disabled: !isNew });
+  const sel = el('select', {},
+    el('option', { value: '' }, '— no story —'),
+    S.stories.map((s) => el('option', { value: s.sid, selected: s.sid === f.storyId }, s.title || 'Untitled story')));
+
+  app.append(
+    el('label', {}, 'Name'), nameIn,
+    el('label', {}, 'Tag ID'), uidIn,
+    isNew ? el('p', { class: 'muted' }, canScan
+      ? 'Tap "Scan figure" and hold the figure to the back of your phone. Or type the ID the box shows when you set the figure on it.'
+      : 'Type the ID the box shows when you set the figure on it. (On an Android phone, Chrome can scan the figure instead.)') : null,
+    isNew && canScan ? el('div', { class: 'buttons' }, el('button', { onclick: async () => {
+      const uid = await scanTag(); if (uid) uidIn.value = uid;
+    } }, '📲 Scan figure')) : null,
+    el('label', {}, 'Story it plays'), sel,
+    el('div', { class: 'buttons', style: 'margin-top:18px' },
+      el('button', { class: 'primary', onclick: () => guard(async () => {
+        if (!uidIn.value.trim()) throw new Error('Please scan the figure or type its ID first.');
+        if (isNew && S.figures.some((x) => x.uid === uidIn.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase()))
+          throw new Error('That figure is already set up. Tap it in the list to change its story.');
+        busy('Saving…');
+        await api('setFigure', { uid: uidIn.value, name: nameIn.value.trim() || 'Figure', storyId: sel.value || null });
+        await refresh(); done(); showHome();
+      }) }, 'Save'),
+      !isNew ? el('button', { class: 'danger', onclick: () => guard(async () => {
+        if (!await confirmBox('Remove ' + f.name + '?', 'The figure will show "New friend!" on the box until it\'s added again. Stories are not deleted.', 'Remove')) return;
+        busy('Removing…'); await api('deleteFigure', { uid: f.uid }); await refresh(); done(); showHome();
+      }) }, 'Remove figure') : null));
+}
+
+// ============================================================ start
+(async function start() {
+  if (!LS.get('sbApi') || !LS.get('sbKey')) return showSetup();
+  try { busy('Loading your stories…'); await refresh(); done(); showHome(); }
+  catch (e) { done(); showSetup('Couldn\'t connect: ' + e.message); }
+})();
+</script>
+</body>
+</html>
