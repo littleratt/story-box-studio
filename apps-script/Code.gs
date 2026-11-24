@@ -372,6 +372,9 @@ function report_(req) {
     if (req.battery !== undefined) b.battery = Number(req.battery);
     if (req.fw) b.fw = String(req.fw).slice(0, 20);
     if (req.sync) b.sync = String(req.sync).slice(0, 200);
+    // "Update 2.5 didn't start/work": the box went back and won't install that version again.
+    const bad = /Update (\d+(?:\.\d+){1,2}) didn't/.exec(b.sync || '');
+    if (bad) b.badFw = bad[1];
     (req.seen || []).slice(0, 50).forEach(function (uid) {
       try { b.seen[cleanUid_(uid)] = Date.now(); } catch (err) {}
     });

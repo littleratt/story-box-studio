@@ -452,7 +452,9 @@ function showHome() {
           : 'Hasn\'t checked in yet (that comes with the next box update).'),
         box.sync ? el('div', { class: 'muted' }, box.sync) : null,
         el('div', { class: 'muted', style: 'margin-top:6px' }, S.firmware
-          ? 'Box software in the Studio: v' + S.firmware.v + (box.fw === S.firmware.v ? ' (installed)' : box.fw ? ' (box will update)' : '')
+          ? 'Box software in the Studio: v' + S.firmware.v + (box.fw === S.firmware.v ? ' (installed)'
+              : box.badFw === S.firmware.v ? ' (didn\'t work on the box, so it stays on v' + (box.fw || '?') + '. Upload a fix with a higher number, like v' + S.firmware.v + '.1)'
+              : box.fw ? ' (box will update)' : '')
           : 'No box software update uploaded.'))),
     el('div', { class: 'buttons' },
       el('button', { class: 'small', onclick: () => guard(uploadFirmware) }, '⬆ Upload box update')));
